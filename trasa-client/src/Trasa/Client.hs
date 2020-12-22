@@ -13,6 +13,7 @@ module Trasa.Client
   , routeToRequest
   ) where
 
+import Data.Maybe (fromMaybe)
 import Data.Word (Word16)
 import qualified Data.List.NonEmpty as NE
 import qualified Data.ByteString as BS
@@ -78,7 +79,7 @@ encodeHeaders
 encodeHeaders accepts mcontent =
   M.toList .
   M.insert N.hAccept (encodeAcceptBS accepts) .
-  maybe id (M.insert N.hContentType . N.renderHeader . contentType) mcontent .
+  maybe id (M.insert N.hContentType . N.renderHeader . fromMaybe (NE.head accepts) . contentType) mcontent .
   fmap TE.encodeUtf8
 
 data Config = Config
@@ -104,10 +105,10 @@ clientWith toMeta config =
           body   = N.responseBody response
       return $ case status < N.status400 of
         True -> case lookup N.hContentType (N.responseHeaders response) of
-          Nothing -> Left (TrasaErr N.status415 "No content type found")
+          Nothing -> Right (Content Nothing body)
           Just bs -> case N.parseAccept bs of
             Nothing  -> Left (TrasaErr N.status415 "Could not decode content type")
-            Just typ -> Right (Content typ body)
+            Just typ -> Right (Content (Just typ) body)
         False -> Left (TrasaErr status body)
       where
         req = mkRequest config method url mcontent accepts
